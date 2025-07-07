@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
 import { EmailFlagConfig } from '@/components/EmailFlagConfig';
 import { ProcessingStatus } from '@/components/ProcessingStatus';
@@ -24,18 +23,120 @@ export type HistoryEntry = {
 
 export type Theme = 'light' | 'dark';
 
+const defaultFlags: EmailFlag[] = [
+  { id: '1', name: 'Urgent', description: 'High priority emails', color: '#ef4444', isActive: false },
+  { id: '2', name: 'Important', description: 'Important business emails', color: '#f59e0b', isActive: false },
+  { id: '3', name: 'Follow-up', description: 'Emails requiring follow-up', color: '#3b82f6', isActive: false },
+  { id: '4', name: 'Archive', description: 'Emails to archive', color: '#6b7280', isActive: false },
+];
+
 const Index = () => {
   const [theme, setTheme] = useState<Theme>('light');
-  const [flags, setFlags] = useState<EmailFlag[]>([
-    { id: '1', name: 'Urgent', description: 'High priority emails', color: '#ef4444', isActive: false },
-    { id: '2', name: 'Important', description: 'Important business emails', color: '#f59e0b', isActive: false },
-    { id: '3', name: 'Follow-up', description: 'Emails requiring follow-up', color: '#3b82f6', isActive: false },
-    { id: '4', name: 'Archive', description: 'Emails to archive', color: '#6b7280', isActive: false },
-  ]);
-  
+  const [flags, setFlags] = useState<EmailFlag[]>(defaultFlags);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingComplete, setProcessingComplete] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+
+  // Check connection status and load user data
+  const checkConnectionAndLoadData = async () => {
+    try {
+      const response = await fetch('/auth/status', {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      
+      setIsConnected(data.is_connected);
+      
+      if (data.is_connected && data.email) {
+        setUserEmail(data.email);
+        await loadUserData(data.email);
+      } else {
+        // Reset to default state when not connected
+        setUserEmail(null);
+        resetToDefaults();
+      }
+    } catch (error) {
+      console.error('Failed to check connection:', error);
+      setIsConnected(false);
+      setUserEmail(null);
+      resetToDefaults();
+    }
+  };
+
+  // Load user's saved data
+  const loadUserData = async (email: string) => {
+    try {
+      const response = await fetch(`/flags/load/${email}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      
+      if (data.flags && data.flags.length > 0) {
+        setFlags(data.flags);
+      } else {
+        // If no saved data, use defaults but save them
+        setFlags(defaultFlags);
+        await saveUserData(email, defaultFlags);
+      }
+    } catch (error) {
+      console.error('Failed to load user data:', error);
+      setFlags(defaultFlags);
+    }
+  };
+
+  // Save user's current data
+  const saveUserData = async (email: string, flagsToSave: EmailFlag[]) => {
+    try {
+      await fetch('/flags/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          email,
+          flags: flagsToSave
+        })
+      });
+    } catch (error) {
+      console.error('Failed to save user data:', error);
+    }
+  };
+
+  // Reset UI to defaults
+  const resetToDefaults = () => {
+    setFlags(defaultFlags);
+    setHistory([]);
+    setIsProcessing(false);
+    setProcessingComplete(false);
+  };
+
+  // Auto-save when flags change (if connected)
+  useEffect(() => {
+    if (isConnected && userEmail) {
+      const timeoutId = setTimeout(() => {
+        saveUserData(userEmail, flags);
+      }, 1000); // Debounce saves
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [flags, isConnected, userEmail]);
+
+  // Check connection on mount and URL changes
+  useEffect(() => {
+    checkConnectionAndLoadData();
+    
+    // Check for auth success in URL
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth') === 'success') {
+      // Clear the URL parameters
+      window.history.replaceState({}, '', window.location.pathname);
+      // Check auth status after a short delay to ensure backend has processed everything
+      setTimeout(checkConnectionAndLoadData, 1000);
+    }
+  }, []);
 
   const handleFlagUpdate = (updatedFlag: EmailFlag) => {
     const previousFlag = flags.find(flag => flag.id === updatedFlag.id);
@@ -105,13 +206,27 @@ const Index = () => {
     }`}>
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-start mb-8">
-          <Header theme={theme} />
+          <Header 
+            theme={theme} 
+            isConnected={isConnected}
+            onConnectionChange={checkConnectionAndLoadData}
+          />
           <SettingsDropdown 
             theme={theme} 
             onThemeChange={setTheme} 
             history={history}
           />
         </div>
+
+        {!isConnected && (
+          <div className={`mb-8 p-4 rounded-lg border-2 border-dashed ${
+            theme === 'dark' ? 'border-gray-600 bg-gray-800' : 'border-gray-300 bg-gray-50'
+          }`}>
+            <p className={`text-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+              Please connect to Gmail to start using the Flag Agent
+            </p>
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
@@ -124,7 +239,7 @@ const Index = () => {
             <div className="flex gap-4">
               <button
                 onClick={handleSortOut}
-                disabled={isProcessing}
+                disabled={isProcessing || !isConnected}
                 className={`px-8 py-3 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                   theme === 'dark' 
                     ? 'bg-white text-black hover:bg-gray-200' 
@@ -136,7 +251,7 @@ const Index = () => {
               
               <button
                 onClick={handleRevert}
-                disabled={isProcessing}
+                disabled={isProcessing || !isConnected}
                 className={`px-8 py-3 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                   theme === 'dark' 
                     ? 'bg-gray-700 text-white hover:bg-gray-600 border border-gray-600' 

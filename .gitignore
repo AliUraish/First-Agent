@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database
+*.db
+*.sqlite3
+*.sqlite
+app.db
+data.db
+email_flags.db
+
+# Environment variables and secrets
+.env
+details.env
+credentials.json
+token.json
+*.pem
+*.key
+*_secret*
+*_key*
+
+# Logs
+*.log
+logs/
+log/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build
+/dist
+/build
+
+# Local development
+.DS_Store
+Thumbs.db
+
+# Frontend specific
+my-vue-app/dist/
+my-vue-app/public/favicon.ico 
