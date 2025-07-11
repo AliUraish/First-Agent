@@ -50,7 +50,7 @@ export const EmailFlagConfig: React.FC<EmailFlagConfigProps> = ({
         Email Flag Configuration
       </h2>
       
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {flags.map((flag) => (
           <div
             key={flag.id}

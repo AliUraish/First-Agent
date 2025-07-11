@@ -3,4 +3,11 @@ uvicorn==0.27.0
 google-auth-oauthlib==1.2.0
 google-auth-httplib2==0.2.0
 google-api-python-client==2.116.0
-python-dotenv==1.0.0 
+google-generativeai==0.3.2
+python-dotenv==1.0.0
+pydantic-settings==2.0.3
+pydantic==2.5.3 
+psycopg2-binary==2.9.9  # PostgreSQL adapter
+supabase==2.3.0  # Supabase client
+sqlalchemy==2.0.25  # SQL toolkit
+alembic==1.13.1  # Database migrations 

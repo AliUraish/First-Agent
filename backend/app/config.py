@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # Database settings
     database_url: str = "sqlite:///./email_flags.db"
     
+    # Supabase settings
+    supabase_url: str = ""
+    supabase_key: str = ""
+    supabase_db_url: str = ""  # Full PostgreSQL connection string
+    
     # AI API keys
     openai_api_key: str
     gemini_api_key: str

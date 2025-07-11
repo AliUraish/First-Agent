@@ -6,7 +6,7 @@ from googleapiclient.discovery import build
 import json
 import os
 from typing import Optional
-from ..database import get_db
+from ..database import get_db, get_db_type
 from ..models import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -30,7 +30,8 @@ async def login():
         
         authorization_url, state = flow.authorization_url(
             access_type='offline',
-            include_granted_scopes='true'
+            include_granted_scopes='true',
+            prompt='consent'  # Force consent screen to get refresh token
         )
         
         return RedirectResponse(authorization_url)
@@ -53,6 +54,13 @@ async def callback(request: Request):
         
         credentials = flow.credentials
         
+        # Validate that we have a refresh token
+        if not credentials.refresh_token:
+            raise HTTPException(
+                status_code=400,
+                detail="No refresh token received. Please try authenticating again."
+            )
+        
         # Get user email
         email = get_user_email(credentials)
         
@@ -62,10 +70,19 @@ async def callback(request: Request):
         try:
             with get_db() as db:
                 cursor = db.cursor()
-                cursor.execute(
-                    "INSERT OR REPLACE INTO users (email, credentials) VALUES (?, ?)",
-                    (user.email, json.dumps(user.credentials))
-                )
+                
+                if get_db_type() == "postgres":
+                    # PostgreSQL syntax
+                    cursor.execute(
+                        "INSERT INTO users (email, credentials) VALUES (%s, %s) ON CONFLICT (email) DO UPDATE SET credentials = EXCLUDED.credentials",
+                        (user.email, json.dumps(user.credentials))
+                    )
+                else:
+                    # SQLite syntax
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO users (email, credentials) VALUES (?, ?)",
+                        (user.email, json.dumps(user.credentials))
+                    )
                 db.commit()
         except Exception as db_error:
             print(f"Database error: {str(db_error)}")
@@ -77,7 +94,10 @@ async def callback(request: Request):
         # Verify the data was saved
         with get_db() as db:
             cursor = db.cursor()
-            cursor.execute("SELECT * FROM users WHERE email = ?", (user.email,))
+            if get_db_type() == "postgres":
+                cursor.execute("SELECT * FROM users WHERE email = %s", (user.email,))
+            else:
+                cursor.execute("SELECT * FROM users WHERE email = ?", (user.email,))
             saved_user = cursor.fetchone()
             
             if not saved_user:
@@ -144,15 +164,33 @@ async def reset():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/clear-credentials")
+async def clear_credentials():
+    """Clear invalid credentials to allow re-authentication"""
+    try:
+        with get_db() as db:
+            cursor = db.cursor()
+            if get_db_type() == "postgres":
+                cursor.execute("UPDATE users SET credentials = NULL WHERE credentials IS NOT NULL")
+            else:
+                cursor.execute("UPDATE users SET credentials = NULL WHERE credentials IS NOT NULL")
+            db.commit()
+        return {"message": "Credentials cleared. Please authenticate again."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 def credentials_to_dict(credentials: Credentials) -> dict:
     """Convert credentials to dictionary for storage"""
+    from ..config import get_settings
+    settings = get_settings()
+    
     return {
         'token': credentials.token,
         'refresh_token': credentials.refresh_token,
-        'token_uri': credentials.token_uri,
-        'client_id': credentials.client_id,
-        'client_secret': credentials.client_secret,
-        'scopes': credentials.scopes
+        'token_uri': credentials.token_uri or "https://oauth2.googleapis.com/token",
+        'client_id': credentials.client_id or settings.google_client_id,
+        'client_secret': credentials.client_secret or settings.google_client_secret,
+        'scopes': credentials.scopes or SCOPES
     }
 
 def get_user_email(credentials: Credentials) -> str:

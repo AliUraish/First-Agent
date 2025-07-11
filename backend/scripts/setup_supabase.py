@@ -1,55 +1,35 @@
-import sqlite3
-from contextlib import contextmanager
-from typing import Optional
 import psycopg2
-from psycopg2.extras import RealDictCursor
-from .config import get_settings
+from pathlib import Path
+import sys
+from dotenv import load_dotenv
 
-settings = get_settings()
+# Add the parent directory to sys.path
+sys.path.append(str(Path(__file__).parent.parent))
+from app.config import get_settings
 
-def get_db_type():
-    """Determine which database to use based on configuration"""
-    return "postgres" if settings.supabase_db_url else "sqlite"
+def get_postgres_connection():
+    """Connect to Supabase PostgreSQL database"""
+    settings = get_settings()
+    if not settings.supabase_db_url:
+        raise ValueError("Supabase database URL not configured!")
+    return psycopg2.connect(settings.supabase_db_url)
 
-@contextmanager
-def get_db():
-    """Database connection context manager"""
-    if get_db_type() == "postgres":
-        conn = psycopg2.connect(
-            settings.supabase_db_url,
-            cursor_factory=RealDictCursor
-        )
-    else:
-        conn = sqlite3.connect("app.db")
-        conn.row_factory = sqlite3.Row
-    
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-def init_db():
-    """Initialize database tables"""
-    with get_db() as conn:
-        cur = conn.cursor()
+def create_tables(pg_conn):
+    """Create tables in Supabase"""
+    with pg_conn.cursor() as cur:
+        print("Creating tables in Supabase...")
         
-        # Users table for OAuth credentials
-        if get_db_type() == "postgres":
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    email TEXT PRIMARY KEY,
-                    credentials JSONB
-                )
-            """)
-        else:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    email TEXT PRIMARY KEY,
-                    credentials TEXT
-                )
-            """)
+        # Users table
+        print("Creating users table...")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                email TEXT PRIMARY KEY,
+                credentials JSONB
+            )
+        """)
         
         # User flags table
+        print("Creating user_flags table...")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS user_flags (
                 email TEXT,
@@ -65,6 +45,7 @@ def init_db():
         """)
         
         # Flag history table
+        print("Creating flag_history table...")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS flag_history (
                 id SERIAL PRIMARY KEY,
@@ -78,6 +59,7 @@ def init_db():
         """)
         
         # Gmail labels table
+        print("Creating gmail_labels table...")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS gmail_labels (
                 id SERIAL PRIMARY KEY,
@@ -94,6 +76,7 @@ def init_db():
         """)
         
         # Sorting sessions table
+        print("Creating sorting_sessions table...")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS sorting_sessions (
                 id SERIAL PRIMARY KEY,
@@ -111,6 +94,7 @@ def init_db():
         """)
         
         # Email processing log table
+        print("Creating email_processing_log table...")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS email_processing_log (
                 id SERIAL PRIMARY KEY,
@@ -127,4 +111,30 @@ def init_db():
             )
         """)
         
-        conn.commit() 
+        pg_conn.commit()
+        print("All tables created successfully!")
+
+def main():
+    """Main setup function"""
+    # Load environment variables
+    load_dotenv(Path(__file__).parent.parent / "details.env")
+    
+    try:
+        # Connect to Supabase
+        print("Connecting to Supabase...")
+        pg_conn = get_postgres_connection()
+        
+        # Create tables
+        create_tables(pg_conn)
+        
+    except Exception as e:
+        print(f"Error during setup: {str(e)}")
+        raise
+    
+    finally:
+        # Close connection
+        if 'pg_conn' in locals():
+            pg_conn.close()
+
+if __name__ == "__main__":
+    main() 

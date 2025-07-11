@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
 import json
-from ..database import get_db
+from ..database import get_db, get_db_type
 
 router = APIRouter(prefix="/flags", tags=["flags"])
 
@@ -19,20 +19,35 @@ async def save_user_flags(flags_data: Dict[str, Any]):
             cursor = db.cursor()
             
             # Clear existing flags for this user
-            cursor.execute("DELETE FROM user_flags WHERE email = ?", (email,))
+            if get_db_type() == "postgres":
+                cursor.execute("DELETE FROM user_flags WHERE email = %s", (email,))
+            else:
+                cursor.execute("DELETE FROM user_flags WHERE email = ?", (email,))
             
             # Insert new flags
             for flag in flags:
-                cursor.execute("""
-                    INSERT INTO user_flags (email, flag_name, flag_description, flag_color, is_active)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (
-                    email,
-                    flag.get("name", ""),
-                    flag.get("description", ""),
-                    flag.get("color", "#000000"),
-                    flag.get("isActive", False)
-                ))
+                if get_db_type() == "postgres":
+                    cursor.execute("""
+                        INSERT INTO user_flags (email, flag_name, flag_description, flag_color, is_active)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (
+                        email,
+                        flag.get("name", ""),
+                        flag.get("description", ""),
+                        flag.get("color", "#000000"),
+                        flag.get("isActive", False)
+                    ))
+                else:
+                    cursor.execute("""
+                        INSERT INTO user_flags (email, flag_name, flag_description, flag_color, is_active)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (
+                        email,
+                        flag.get("name", ""),
+                        flag.get("description", ""),
+                        flag.get("color", "#000000"),
+                        flag.get("isActive", False)
+                    ))
             
             db.commit()
         
@@ -47,24 +62,41 @@ async def load_user_flags(email: str):
     try:
         with get_db() as db:
             cursor = db.cursor()
-            cursor.execute("""
-                SELECT flag_name, flag_description, flag_color, is_active
-                FROM user_flags 
-                WHERE email = ?
-                ORDER BY flag_name
-            """, (email,))
+            if get_db_type() == "postgres":
+                cursor.execute("""
+                    SELECT flag_name, flag_description, flag_color, is_active
+                    FROM user_flags 
+                    WHERE email = %s
+                    ORDER BY flag_name
+                """, (email,))
+            else:
+                cursor.execute("""
+                    SELECT flag_name, flag_description, flag_color, is_active
+                    FROM user_flags 
+                    WHERE email = ?
+                    ORDER BY flag_name
+                """, (email,))
             
             rows = cursor.fetchall()
             
             flags = []
             for row in rows:
-                flags.append({
-                    "id": row["flag_name"].lower().replace(" ", "_"),
-                    "name": row["flag_name"],
-                    "description": row["flag_description"],
-                    "color": row["flag_color"],
-                    "isActive": bool(row["is_active"])
-                })
+                if hasattr(row, 'keys'):  # PostgreSQL with RealDictCursor
+                    flags.append({
+                        "id": row["flag_name"].lower().replace(" ", "_"),
+                        "name": row["flag_name"],
+                        "description": row["flag_description"],
+                        "color": row["flag_color"],
+                        "isActive": bool(row["is_active"])
+                    })
+                else:  # SQLite with regular cursor
+                    flags.append({
+                        "id": row[0].lower().replace(" ", "_"),
+                        "name": row[0],
+                        "description": row[1],
+                        "color": row[2],
+                        "isActive": bool(row[3])
+                    })
             
             return {"flags": flags}
     
@@ -77,7 +109,10 @@ async def clear_user_flags(email: str):
     try:
         with get_db() as db:
             cursor = db.cursor()
-            cursor.execute("DELETE FROM user_flags WHERE email = ?", (email,))
+            if get_db_type() == "postgres":
+                cursor.execute("DELETE FROM user_flags WHERE email = %s", (email,))
+            else:
+                cursor.execute("DELETE FROM user_flags WHERE email = ?", (email,))
             db.commit()
         
         return {"message": "User flags cleared successfully"}

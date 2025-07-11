@@ -13,10 +13,10 @@ export const Header: React.FC<HeaderProps> = ({ theme, isConnected = false, onCo
 
   useEffect(() => {
     // Check for auth success in URL
-    const params = new URLSearchParams(window.location.search);
+      const params = new URLSearchParams(window.location.search);
     if (params.get('auth') === 'success') {
-      // Clear the URL parameters
-      window.history.replaceState({}, '', window.location.pathname);
+        // Clear the URL parameters
+        window.history.replaceState({}, '', window.location.pathname);
       // Trigger parent to check connection
       if (onConnectionChange) {
         setTimeout(onConnectionChange, 1000);
@@ -76,17 +76,17 @@ export const Header: React.FC<HeaderProps> = ({ theme, isConnected = false, onCo
       </div>
 
       {/* Gmail connection button */}
-      <button
+              <button
         onClick={handleGmailConnect}
         disabled={isChecking}
         className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
-          theme === 'dark' 
+                  theme === 'dark' 
             ? 'bg-white text-black hover:bg-gray-200' 
             : 'bg-black text-white hover:bg-gray-800'
         } ${isChecking ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
         {isChecking ? 'Disconnecting...' : isConnected ? 'Disconnect Gmail' : 'Connect to Gmail'}
-      </button>
+              </button>
     </div>
   );
 };
